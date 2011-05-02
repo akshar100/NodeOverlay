@@ -3,7 +3,7 @@ var profiles= [{
 	name:"iitb",
 	key:'key1',
 	pubs:["root.india.mumbai"],
-	subs:["root.india.mumbai","root.india.pune","root.america.ny","root.america.ca"]
+	subs:["root.india.mumbai","root.india.pune","root.america.ny"]
 }
 ];
 

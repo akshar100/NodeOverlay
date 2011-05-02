@@ -12,8 +12,9 @@ else
 	var arr = me.split(".");	
 	var myParent=arr[arr.length-2];
 }
-var r_table_pub = {};
-var r_table_sub = {};
+var r_table_pub = {}; //A table that returns True of False for a given key. If true only then the broker accepts published event
+var r_table_sub = {}; //A table that returns a set of brokers to whom the event should be forwarded
+var subscription= {};//A table that returns True of False for a given key. If true only then the broker accepts subscriber requests.
 var profiles = myapp.profiles;
 var port = myapp.port;
 var myPort=port[me_name];
@@ -28,7 +29,20 @@ function console(obj)
 
 function update_r_table(key,list,parent,type)
 {
-	
+	if(type==="pub")
+	{
+		if(list.indexOf(me)>-1)
+		{
+			r_table_pub[key] = true ; 
+		}
+	}
+	if(type==="sub")
+	{
+		if(list.indexOf(me)>-1)
+		{
+			subscription[key] = true ; 
+		}
+	}
 	if(parent==undefined || !parent)
 	{
 		parent= false; 
@@ -40,7 +54,7 @@ function update_r_table(key,list,parent,type)
 	}
 	else
 	{
-		r_table_pub[key] = children.slice(); 
+		//r_table_pub[key] = children.slice(); 
 	}
 	if(parent)
 	{
@@ -48,7 +62,7 @@ function update_r_table(key,list,parent,type)
 		{
 			if(myParent!=="")
 			{
-				r_table_pub[key].push(myParent);
+				//r_table_pub[key].push(myParent);
 			}
 		}
 		else
@@ -140,6 +154,32 @@ function IAmRoot()
 		}
 	}
 }
+function propogate_event(data)
+{
+	var children = r_table_sub[data.key];
+	var i=0;
+	for(i=0;i<children.length;i++)
+	{
+		var site = http.createClient(port[children[i]], "e-yantra.org");
+		var req = site.request("GET", "/push/"+escape(JSON.stringify(data)), {'host' : "e-yantra.org"});
+					req.on('response', function(resp) {
+							
+					});
+					req.end();
+	}
+}
+
+function receive_event(data)
+{
+	var forward_to = r_table_sub[data.key];
+	if(forward_to.indexOf(data.current_forwarder)>-1)
+	{
+		forward_to.splice(forward_to.indexOf(data.current_forwarder),1); //delete the orginator;
+	}
+	data.current_forwarder = me_name;
+	propogate_event(data);
+	sys.puts("Broker "+me_name+" got the event");
+}
 
 IAmRoot();
 //sys.puts(myPort);
@@ -148,9 +188,8 @@ http.createServer(function(request, response) {
 	var commands = uri.split("/");
 	if(commands[1]==="admin_sub")
 	{
-		//sys.puts("Admin Sub"+commands[2]);
+		
 		var data = JSON.parse(unescape(commands[2]));
-		//sys.puts(commands[2]);
 		update_r_table(data.key,data.list,data.parent,data.type);
 		console(r_table_pub);
 	}
@@ -167,6 +206,34 @@ http.createServer(function(request, response) {
 		sys.puts("Routing table of "+me);
 		sys.puts("Sub "+JSON.stringify(r_table_sub));
 		sys.puts("Pub "+JSON.stringify(r_table_pub));
+		sys.puts("################");
+	}
+	if(commands[1]==="publish")
+	{
+		var key = commands[2];
+		var item = commands[3]; 
+		if(r_table_pub[key]!="undefined" && r_table_pub[key])
+		{
+			var data = {
+				key:key,
+				item:item,
+				origin:me_name,
+				current_forwarder:me_name
+				
+			};
+			//propogate_event(data); 
+			
+			receive_event(data);
+		}
+		else
+		{
+			response.write("Cant publish. You dont have permission to publish from this node. ");
+		}
+	}
+	if(commands[1]==="push")
+	{
+		var data =JSON.parse(unescape(commands[2]));
+		receive_event(data);
 	}
 	response.end();
 }).listen(myPort);
