@@ -18,6 +18,7 @@ var subscription= {};//A table that returns True of False for a given key. If tr
 var profiles = myapp.profiles;
 var port = myapp.port;
 var myPort=port[me_name];
+var subscriber_list={};
 
 function console(obj)
 {
@@ -178,7 +179,44 @@ function receive_event(data)
 	}
 	data.current_forwarder = me_name;
 	propogate_event(data);
-	sys.puts("Broker "+me_name+" got the event");
+	sys.puts("Broker "+me_name+" got the event.");
+	
+	if(subscription[data.key]!=="undefined" && subscription[data.key])
+	{
+		if(subscriber_list)
+		{
+			var i=0;
+			for(i in subscriber_list)
+			{
+				
+				var sub = subscriber_list[i];
+				
+				if(sub.filter)
+				{
+					sys.puts(sub.filter);
+					var filter;
+					eval("filter="+sub.filter);
+					if(filter(data.item))
+					{
+						var site = http.createClient(sub.port, "e-yantra.org");
+						var req = site.request("GET", "/notify/"+escape(JSON.stringify(data)), {'host' : "e-yantra.org"});
+							req.on('response', function(resp) {
+									
+							});
+						req.end();
+						sys.puts("Forwarding to subscriber "+i);
+					}
+				}
+				
+			}
+		}
+	}
+}
+
+function add_subscriber(data)
+{
+	sys.puts("Subscriber is added to "+me_name);
+	subscriber_list[data.my_name] = data;
 }
 
 IAmRoot();
@@ -235,5 +273,12 @@ http.createServer(function(request, response) {
 		var data =JSON.parse(unescape(commands[2]));
 		receive_event(data);
 	}
+	
+	if(commands[1]==="subscribe")
+	{
+		var data =JSON.parse(unescape(commands[2]));
+		add_subscriber(data);
+	}
+	
 	response.end();
 }).listen(myPort);
